@@ -1,4 +1,5 @@
-from flask import Flask, render_template, redirect, url_for, flash, abort
+
+from flask import Flask, render_template, redirect, url_for, flash, abort, request
 from flask_bootstrap import Bootstrap
 from flask_ckeditor import CKEditor
 import datetime as dt
@@ -8,22 +9,29 @@ from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from flask_login import UserMixin, login_user, LoginManager, login_required, current_user, logout_user
-from forms import CreatePostForm, RegisterUser, LoginUser, CommentForm
+from forms import CreatePostForm, RegisterUser, LoginUser, CommentForm, ContactForm
 from wtforms import StringField, SubmitField, PasswordField, EmailField
 from flask_wtf import FlaskForm
 from wtforms.validators import DataRequired, URL, Email
 from functools import wraps
 from flask_gravatar import Gravatar
+import os
+import smtplib
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(verbose=True)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
+SECRET_KEY = os.urandom(32)
+app.config['SECRET_KEY'] = SECRET_KEY
 ckeditor = CKEditor(app)
 Bootstrap(app)
 YEAR = dt.datetime.now().strftime('%Y')
-
+load_dotenv(find_dotenv())
+EMAIL = os.environ.get('EMAIL')
+PASSWORD = os.environ.get('PASSWORD')
 
 ##CONNECT TO DB
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///blog.db")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -158,9 +166,22 @@ def about():
     return render_template("about.html", current_user=current_user, year=YEAR)
 
 
-@app.route("/contact")
+@app.route("/contact", methods=['GET', 'POST'])
 def contact():
-    return render_template("contact.html", current_user=current_user, year=YEAR)
+    form = ContactForm()
+    if form.validate_on_submit():
+        name = form.name.data
+        email = form.email.data
+        phone = form.phone.data
+        message = form.message.data
+        with smtplib.SMTP('smtp.gmail.com')as connection:
+            connection.starttls()
+            connection.login(user=EMAIL, password=PASSWORD)
+            connection.sendmail(from_addr=EMAIL,
+                                to_addrs='yenetutor@gmail.com',
+                                msg=f'Subject: Contact\n\nName: {name}\nEmail: {email}\nPhone No: {phone}\nMessage: {message}')
+        return redirect(url_for('contact'))
+    return render_template("contact.html", current_user=current_user, year=YEAR, form=form)
 
 
 def admin_only(f):
@@ -227,4 +248,4 @@ def delete_post(post_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000)
